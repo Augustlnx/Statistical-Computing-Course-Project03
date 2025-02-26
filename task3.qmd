@@ -1,0 +1,979 @@
+---
+title: "统计计算Week9"
+format: html
+editor: visual
+theme: flatly
+toc: true
+toc-title: "目录"
+toc-depth: 3
+---
+
+# 零、简单尝试
+
+抽phi
+
+iid负二项分布
+
+```{r}
+# 加载必要的包
+library(stats)
+
+# 设置真实参数
+set.seed(123) # 设置随机种子，确保可重复性
+true_r <- 5    # 真实的r参数
+true_p <- 0.3  # 真实的p参数
+
+# 设置采样参数
+n <- 800      # 数据样本量
+
+# 生成负二项分布数据
+y <- rnbinom(n, size = true_r, prob = 1 - true_p) # 参数化：size为r，prob为1-p
+```
+
+```{r}
+# 设置先验参数
+a0 <- 3    # Beta分布的a0
+b0 <- 3    # Beta分布的b0
+e0 <- 1    # Gamma分布的形状参数
+f0 <- 2    # Gamma分布的速率参数
+
+# 初始化参数
+p <- runif(1)   # 初始化p
+r <- rgamma(1, shape = e0, rate = f0) # 初始化r
+iter <- 5000 # 迭代次数
+burn_in <- 1000 # burn-in期
+
+
+# 存储后验样本
+samples_p <- numeric(iter)
+samples_r <- numeric(iter)
+
+# 定义CRT采样函数
+CRT <- function(yj, r) {
+  l <- 0
+  if (yj == 0) {
+    return(l)
+  }
+  m <- seq(1, yj)
+  l <- sum(rbinom(yj, 1, r / (m - 1 + r)))
+  return(l)
+}
+
+# Gibbs采样
+for (t in 1:iter) {
+  if (t %% 1000 == 0){
+  cat("迭代次数:", t, "\r")}
+  # Step 1: 更新p | -
+  a_post <- a0 + sum(y) # 后验Beta分布的shape1
+  b_post <- b0 + n * r  # 后验Beta分布的shape2
+  p <- rbeta(1, a_post, b_post)
+  
+  # Step 2: 更新l_j | -
+  # l <- numeric(n)
+  # for (j in 1:n){
+  #   l[j] <- CRT(y[j], r)
+  # }
+  l <- sapply(y, CRT, r = r)
+  
+  # Step 3: 更新r | -
+  e_post <- e0 + sum(l)             # 后验Gamma分布的shape
+  f_post <- f0 - n * log(1 - p)    # 后验Gamma分布的rate
+  r <- rgamma(1, shape = e_post, rate = f_post)
+  
+  # 存储当前的后验样本
+  samples_p[t] <- p
+  samples_r[t] <- r
+}
+```
+
+```{r}
+# 去掉burn-in
+samples_p1 <- samples_p[-(1:burn_in)]
+samples_r1 <- samples_r[-(1:burn_in)]
+
+# 计算后验均值
+posterior_mean_p <- mean(samples_p1)
+posterior_mean_r <- mean(samples_r1)
+
+# 输出结果
+cat("真实参数p:", true_p, "\n估计参数p:", posterior_mean_p, "\n")
+cat("真实参数r:", true_r, "\n估计参数r:", posterior_mean_r, "\n")
+
+plot_trace_and_cummean(samples_p1, "p", true_p)
+plot_trace_and_cummean(samples_r1, "r", true_r)
+
+
+
+```
+
+每100取一个参数样本
+
+```{r}
+step <- 200
+subsamples_p <- numeric((iter-burn_in)/step)
+subsamples_r <- numeric((iter-burn_in)/step)
+for (t in 1:(iter-burn_in)) {
+  if (t %% step == 0){
+    subsamples_p[t/step-burn_in/step] <- samples_p[t]
+    subsamples_r[t/step-burn_in/step] <- samples_r[t]
+  }
+}
+cat("参数p的后验均值:", mean(subsamples_p), mean(subsamples_r))
+```
+
+互异p负二项分布
+
+```{r}
+# 加载必要的包
+library(stats)
+
+# 设置真实参数
+set.seed(123) # 设置随机种子，确保可重复性
+true_r <- 2   # 真实的r参数
+
+# 设置采样参数
+n <- 200      # 数据样本量
+
+# 生成正态分布数据
+mu <- rnorm(n, mean = 6, sd = 1) # 正态分布的均值
+true_p <- mu/(true_r + mu) # 真实的p参数
+
+# 生成互异p负二项分布数据
+y <- numeric(n)
+for (i in 1:n){
+  y[i] <- rnbinom(1, size = true_r, prob = 1 - true_p[i])
+}
+
+```
+
+```{r}
+y <- Y[which(D==1)]
+n <- length(y)
+true_p <- gamma[which(D==1)]
+```
+
+```{r}
+# 计算mu_i
+mu <- exp(X %*% beta_true)
+gamma <- mu/(mu+phi_true)
+phi_true <- 4
+true_p <- mu/(phi_true+mu)
+# 根据mu和phi生成Z（负二项分布）
+for (i in 1:n){
+  y[i] <- rnbinom(1, size = true_r, prob = 1 - true_p[i])
+}
+n <- length(y)
+D <- rbinom(n, 1, 1)  # D_i
+
+
+```
+
+```{r}
+# 设置先验参数
+a0 <- 1    # Beta分布的a0
+b0 <- 1    # Beta分布的b0
+e0 <- 1    # Gamma分布的形状参数
+f0 <- 1    # Gamma分布的速率参数
+
+# 初始化参数
+p <- runif(1)   # 初始化p
+r <- rgamma(1, shape = e0, rate = f0) # 初始化r
+iter <- 1000  # 迭代次数
+burn_in <- 300 # burn-in期
+
+
+# 存储后验样本
+samples_p <- numeric(iter)
+samples_r <- numeric(iter)
+
+# 定义CRT采样函数
+CRT <- function(yj, r) {
+  l <- 0
+  if (yj == 0) {
+    return(l)
+  }
+  for (m in 1:yj) {
+    l <- l + rbinom(1, 1, r / (m - 1 + r))
+  }
+  return(l)
+}
+
+
+# Gibbs采样
+for (t in 1:iter) {
+  if (t %% 1000 == 0){
+  cat("迭代次数:", t, "\r")}
+
+  # Step 2: 更新l_j | -
+  l <- numeric(n)
+  for (j in 1:n){
+    l[j] <- CRT(y[j], r)
+  }
+
+  # Step 3: 更新r | -
+  e_post <- e0 + sum(l)             # 后验Gamma分布的shape
+  #f_post <- f0 - n * log(1 - mean(true_p))    # 后验Gamma分布的rate
+  f_post <- f0 - sum(log(1 - true_p))          # 后验Gamma分布的rate
+  r <- rgamma(1, shape = e_post, rate = f_post)
+  #r <- update_phi_MH(Y, D, X, beta_true, Y, r[t - 1], e0, f0, 0.1)
+  samples_r[t] <- r
+}
+samples_r <- samples_r[-(1:burn_in)]
+posterior_mean_r <- mean(samples_r)
+posterior_mean_r
+
+```
+
+```{r}
+# 去掉burn-in
+samples_p <- samples_p[-(1:burn_in)]
+samples_r <- samples_r[-(1:burn_in)]
+
+# 计算后验均值
+posterior_mean_p <- mean(samples_p)
+posterior_mean_r <- mean(samples_r)
+
+# 输出结果
+cat("平均真实参数p:", mean(true_p), "\n估计参数p:", posterior_mean_p, "\n")
+cat("真实参数r:", true_r, "\n估计参数r:", posterior_mean_r, "\n")
+
+# 绘制收敛图
+par(mfrow = c(2, 1))
+plot(samples_p, type = "l", col = "blue", main = "参数p的收敛图", xlab = "迭代次数", ylab = "p")
+plot(samples_r, type = "l", col = "red", main = "参数r的收敛图", xlab = "迭代次数", ylab = "r")
+plot_trace_and_cummean(samples_r, "phi", true_r)
+
+```
+
+抽beta（特殊数据生成）
+
+```{r}
+# 生成自变量 X1, X2 (假设是正态分布)
+n <- 400
+X1 <- test_data$X_i1
+X2 <- test_data$X_i2
+X <- cbind(1, X1, X2)  # 包括常数项
+
+# 给定回归系数和生成参数
+beta_true <- c(6, -2, -2)
+phi_true <- 4
+
+# 计算mu_i
+mu <- exp(X %*% beta_true)
+
+# 根据mu和phi生成Z（负二项分布）
+Z <- rnbinom(n, size = phi_true, mu = mu)
+Y <-Z  
+D <- rbinom(n, 1, 1)  # D_i
+
+data <- data.frame(Y, X1, X2)
+ggpairs(data, #
+             cardinality_threshold = 15)
+```
+
+随机数据生成：
+
+```{r}
+# 生成自变量 X1, X2 (假设是正态分布)
+n <- 1000
+X1 <- rnorm(n, mean = 0, sd = 1)
+X2 <- rnorm(n, mean = 0, sd = 1)
+X <- cbind(1, X1, X2)  # 包括常数项
+
+# 给定回归系数和生成参数
+beta_true <- c(6, -2, -2)
+phi_true <- 4
+mu <- exp(X %*% beta_true)
+Z <- rnbinom(n, size = phi_true, mu = mu)
+D <- rbinom(n, 1, 1)  # D_i
+Y <- Z
+
+```
+
+抽样
+
+```{r}
+library(BayesLogit)  # 用于生成 Polya-Gamma 随机变量
+library(MASS)        # 用于多变量正态分布抽样
+
+# Gibbs抽样函数
+gibbs_sampler <- function(Y, X, iterations, burn_in, beta_prior_mean, beta_prior_sd, e0, f0,true_param,D_true) {
+  n <- length(Y)
+  p <- ncol(X)  # X 的列数，等于 beta 的维度
+  # 获取真实参数
+  beta_true <- true_param[1:3]
+  phi_true <- true_param[4]
+  
+  # 初始化参数
+  beta <- matrix(0, nrow = iterations, ncol = p)  # 储存 beta 的样本
+  # 初始化目标参数
+  beta[1, ] <- rep(0.2, p)         # 初始 beta
+  # Gibbs抽样
+  for (t in 2:iterations) {
+    if (t %% 1000 == 0){
+      cat("迭代次数:", t, "\r")
+    }
+    # Step (e): 更新 beta
+    beta[t, ] <- update_beta_PG(Y, D_true, X, phi_true, beta_prior_mean, beta_prior_sd)
+    # beta[t, ] <- update_beta_MH(Y, D_true, X, phi_true, beta[t-1, ], beta_prior_mean, beta_prior_sd, 0.1)
+  }
+  
+  # 返回后验样本
+  return(list(beta = beta))
+}
+
+iterations <- 5000
+burn_in <- 1000
+beta_prior_mean <- c(0.2, -0.2, -0.2)  # beta 的先验均值
+beta_prior_sd <- c(10, 10, 10)  # beta 的先验标准差
+
+
+true_param <- c(beta_true, phi_true, 0, 0,D)
+# 调用 Gibbs 抽样
+result <- gibbs_sampler(Y, X, iterations, burn_in, beta_prior_mean, beta_prior_sd, e0, f0,true_param,D_true=D)
+
+beta_copy <- beta_true
+beta_copy[1] <- beta_true[1]-log(phi_true)
+# 查看结果
+cat("Posterior mean of beta:\n", colMeans(result$beta[-(1:burn_in), ]), "\n true beta:\n", beta_copy, "\n")
+
+```
+
+```{r}
+# 加载必要的库
+library(ggplot2)
+library(dplyr)
+
+# 绘制轨迹图和累积均值图的函数
+plot_trace_and_cummean <- function(samples, param_name) {
+  iterations <- length(samples)
+  
+  # 计算累积均值
+  cum_mean <- cumsum(samples) / seq_along(samples)
+  
+  # 将数据转化为数据框以便于 ggplot 使用
+  data <- data.frame(
+    Iteration = 1:iterations,
+    Samples = samples,
+    CumulativeMean = cum_mean
+  )
+  
+  # 使用 ggplot 绘制轨迹图和累积均值图
+  p1 <- ggplot(data) +
+    geom_line(aes(x = Iteration, y = Samples), color = "blue") +
+    labs(title = paste("Trace Plot of", param_name), x = "Iteration", y = param_name) +
+    theme_minimal()
+  
+  p2 <- ggplot(data) +
+    geom_line(aes(x = Iteration, y = CumulativeMean), color = "red") +
+    labs(title = paste("Cumulative Mean of", param_name), x = "Iteration", y = paste("Cumulative Mean of", param_name)) +
+    theme_minimal()
+  
+  # 使用 gridExtra 包将两个图呈现于同一窗口
+  library(gridExtra)
+  grid.arrange(p1, p2, ncol = 1)
+}
+# 对 beta 的每个维度分别绘图
+for (i in 1:ncol(result$beta)) {
+  plot_trace_and_cummean(result$beta[, i], paste("beta", i, sep = "_"))
+}
+
+```
+
+? '\# 一、数据生成
+
+## 1.1 测试数据分析
+
+```{r}
+# 加载必要的包
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+
+# 读取数据
+test_data <- readxl::read_excel("Data_0-1膨胀负二项回归.xlsx")
+# test_data$X_i1 <- test_data$X_i1/0.2
+head(test_data)
+
+# 画箱线图
+# 我们将 Y_i 和 X_i1, X_i2 画成箱线图
+test_data_long <- test_data %>%
+  pivot_longer(cols = c(Y_i, X_i1, X_i2), names_to = "变量", values_to = "值")
+
+# 分面箱线图，坐标轴设置为独立
+ggplot(test_data_long, aes(x = 值)) +
+  geom_boxplot() +
+  facet_wrap(~变量, scales = "free") +  # 设置为独立坐标轴
+  theme_minimal() +
+  labs(title = "分面箱线图", x = "值", y = "变量")+
+  coord_flip()
+  #翻转坐标轴
+```
+
+```{r}
+# 频数图（直方图），坐标轴设置为独立
+ggplot(test_data_long, aes(x = 值)) +
+  geom_histogram(bins = 8, fill = "#235689", alpha = 0.7, color = "black") +
+  facet_wrap(~变量, scales = "free") +  # 设置为独立坐标轴
+  theme_minimal() +
+  labs(title = "频数图", x = "值", y = "频数")
+```
+
+检测相关性：
+
+```{r}
+library(GGally) # 加载GGally包
+# 2.1 默认参数绘图
+p1 = ggpairs(subset(test_data, select = -序号), #
+             cardinality_threshold = 15) 
+cat("Y的最大值:",max(test_data$Y_i),"\n")
+cat("Y=0个数",sum(test_data$Y_i==0),"\n")
+cat("Y=1个数",sum(test_data$Y_i==1),"\n")
+print(p1)
+
+```
+
+## 1.2 随机模拟数据生成：
+
+```{r}
+
+# 生成自变量 X1, X2 (假设是正态分布)
+n <- 400
+X1 <- test_data$X_i1
+X2 <- test_data$X_i2
+X <- cbind(1, X1, X2)  # 包括常数项
+
+# 给定回归系数和生成参数
+beta_true <- c(4.5, -1, -2)
+phi_true <- 4
+p_true <- 0.6
+pi0_true <- 0.2
+
+# 计算mu_i
+mu <- exp(X %*% beta_true)
+gamma <- mu/(mu+phi_true)
+# 根据mu和phi生成Z（负二项分布）
+Z <- rnbinom(n, size = phi_true, mu = mu)
+M <- rbinom(n, 1, p_true)  # M_i
+# 根据D和Z生成Y
+D <- rbinom(n, 1, 1 - pi0_true)  # D_i
+
+Y <- (1 - D) * M + D * Z  # 生成观测数据Y
+data <- data.frame(Y, X1, X2)
+#打印Y的最大值
+cat("Y的最大值:",max(Y),"\n")
+cat("Y=0个数",sum(Y==0),"\n")
+cat("Y=1个数",sum(Y==1),"\n")
+ggpairs(data, #
+             cardinality_threshold = 15)
+```
+
+# 二、抽样函数
+
+## 2.1 更新$\pi_0, p, D$
+
+```{r}
+# 更新 pi_0
+update_pi0 <- function(D) {
+  alpha <- length(D) - sum(D) + 1
+  beta <- sum(D) + 1
+  return(rbeta(1, alpha, beta))
+}
+
+# 更新 p
+update_p <- function(M, D) {
+  alpha <- sum(M * (1 - D)) + 1
+  beta <- sum((1 - M) * (1 - D)) + 1
+  return(rbeta(1, alpha, beta))
+}
+
+update_DMZ <- function(Y, X, beta, pi_0, p, phi, D, M, Z,gamma) {
+  n <- length(Y)  # 数据的大小
+  mu <- phi*gamma/(1-gamma)
+  for (i in 1:n) {
+    # mu_i <- exp(t(X[i]) %*% beta)
+    mu_i <- mu[i]
+    if (Y[i] == 0) {
+      # 情况 1: Y_i = 0
+      p_Z <- (pi_0 * (1 - p)) / (pi_0 * (1 - p) + (1 - pi_0) * dnbinom(0, size = phi, mu = mu_i))
+      
+      # 抛第一枚硬币，正面概率为 p_Z
+      if (rbinom(1, 1, p_Z) == 1) {
+        # 正面：D_i = M_i = 0，按负二项分布抽取 Z_i
+        D[i] <- 0
+        M[i] <- 0
+        Z[i] <- rnbinom(1, size = phi, mu = mu_i)  # 使用负二项分布抽取 Z_i
+      } else {
+        # 反面：D_i = 1, Z_i = 0，抛第二枚硬币，正面概率为 p
+        D[i] <- 1
+        Z[i] <- 0
+        if (rbinom(1, 1, p) == 1) {
+          M[i] <- 1  # M_i = 1
+        } else {
+          M[i] <- 0  # M_i = 0
+        }
+      }
+    }
+    
+    else if (Y[i] == 1) {
+      # 情况 2: Y_i = 1
+      p_Z <- (pi_0 * p) / (pi_0 * p + (1 - pi_0) * dnbinom(1, size = phi, mu = mu_i))
+      
+      # 抛第一枚硬币，正面概率为 p_Z
+      if (rbinom(1, 1, p_Z) == 1) {
+        # 正面：D_i = 0, M_i = 1，按负二项分布抽取 Z_i
+        D[i] <- 0
+        M[i] <- 1
+        Z[i] <- rnbinom(1, size = phi, mu = mu_i)  # 使用负二项分布抽取 Z_i
+      } else {
+        # 反面：D_i = 1, Z_i = 0，抛第二枚硬币，正面概率为 p
+        D[i] <- 1
+        Z[i] <- 0
+        if (rbinom(1, 1, p) == 1) {
+          M[i] <- 1  # M_i = 1
+        } else {
+          M[i] <- 0  # M_i = 0
+        }
+      }
+    }
+    
+    else if (Y[i] > 1) {
+      # print("Y[i] > 1")
+      # 情况 3: Y_i > 1
+      D[i] <- 1
+      Z[i] <- Y[i]
+      # 抛硬币，正面概率为 p
+      if (rbinom(1, 1, p) == 1) {
+        # 正面：D_i = 1, M_i = 1, Z_i = Y_i
+        M[i] <- 1
+      } else {
+        # 反面：D_i = 1, M_i = 0, Z_i = Y_i
+        M[i] <- 0
+      }
+    }
+  }
+  
+  return(list(D = D, M = M, Z = Z))
+}
+
+# 测试
+DMZ <- update_DMZ(Y, X, beta_true, pi0_true, p_true, phi_true, D, M, Z,gamma)
+hatD <- DMZ$D
+hatM <- DMZ$M
+hatZ <- DMZ$Z
+
+indices <- which(Y<=1)
+cat("准确率D",mean(hatD[indices]==D[indices]),"\n")
+cat("准确率M",mean(hatM[indices]==M[indices]),"\n")
+cat("准确率Z",mean(hatZ[indices]==Z[indices]),"\n")
+```
+
+## 2.2 更新$\beta$
+
+```{r}
+# 更新 beta (用Pólya-Gamma方法)
+library(BayesLogit)  # 用于生成 Polya-Gamma 随机变量
+
+# 更新 beta 的函数
+update_beta_PG <- function(Y, D, X, phi, beta_prior_mean, beta_prior_sd) {
+  n <- length(Y)
+  p <- ncol(X)  # X 的列数，等于 beta 的维度
+  
+  # Step 1: 生成 Polya-Gamma 变量 omega_i
+  omega <- numeric(n)
+  for (i in 1:n) {
+    b <- (Y[i] + phi) * D[i]
+    if(b == 0){
+      omega[i] <- 0}
+    else{
+    omega[i] <- rpg(num = 1, h = b, z = 0)}
+  }
+  
+  # Step 2: 计算 kappa
+  kappa <- (Y - phi) * D / 2
+  
+  # Step 3: 构造对角矩阵 Omega
+  Omega <- diag(omega)
+  
+  # Step 4: 计算协方差矩阵 H_omega
+  prior_precision <- diag(1 / beta_prior_sd^2, p, p)  # 先验精度矩阵
+  H_omega <- solve(t(X) %*% Omega %*% X + prior_precision)
+  
+  # Step 5: 计算均值 M_omega
+  prior_term <- prior_precision %*% beta_prior_mean  # 先验的贡献
+  M_omega <- H_omega %*% (t(X) %*% kappa + prior_term)
+  
+  # Step 6: 从正态分布中抽样新的 beta
+  beta_new <- MASS::mvrnorm(1, mu = as.vector(M_omega), Sigma = H_omega)
+  
+  return(beta_new)
+}
+
+# 测试：
+beta_prior_mean <- c(0, 0, 0)  # beta 的先验均值
+beta_prior_sd <- c(1, 1, 1)  # beta 的先验标准差
+# 更新 beta
+beta_updated <- update_beta_PG(Y, D, X, phi_true, beta_prior_mean, beta_prior_sd)
+# 查看结果
+cat("Updated beta:\n", beta_updated, "\n")
+```
+
+```{r}
+# Metropolis-Hastings算法更新beta
+update_beta_MH <- function(Y, D, X, phi, beta_current, beta_prior_mean, beta_prior_sd, sigma_q) {
+  n <- length(Y)
+  p <- ncol(X)  # X 的列数，等于 beta 的维度
+  
+  # 计算当前beta下的目标分布值（后验分布的未归一化部分）
+  log_p_current <- 0
+  for (i in 1:n) {
+    eta_i <- sum(X[i, ] * beta_current)
+    log_p_current <- log_p_current + (Y[i] * D[i]) * eta_i - (Y[i] + phi) * D[i] * log(1 + exp(eta_i))
+  }
+  
+  # 添加先验分布的对数（正态分布的对数）
+  log_p_current <- log_p_current - 0.5 * sum((beta_current - beta_prior_mean)^2 / beta_prior_sd^2)
+  
+  # Step 1: 生成候选的beta（建议分布）
+  beta_prop <- MASS::mvrnorm(1, mu = beta_current, Sigma = sigma_q^2 * diag(p))
+  
+  # 计算候选beta的目标分布值
+  log_p_prop <- 0
+  for (i in 1:n) {
+    eta_i <- sum(X[i, ] * beta_prop)
+    log_p_prop <- log_p_prop + (Y[i] * D[i]) * eta_i - (Y[i] + phi) * D[i] * log(1 + exp(eta_i))
+  }
+  
+  # 添加先验分布的对数（正态分布的对数）
+  log_p_prop <- log_p_prop + dnorm(beta_prop, mean = beta_prior_mean, sd = beta_prior_sd, log = TRUE)
+  #log_p_prop <- log_p_prop - 0.5 * sum((beta_prop - beta_prior_mean)^2 / beta_prior_sd^2)
+  
+  # Step 2: 计算接受概率alpha
+  log_alpha <- min(0, log_p_prop - log_p_current)
+  #print(alpha)
+  
+  # Step 3: 生成均匀随机数u，并决定是否接受新参数
+  u <- runif(1)
+  
+  if (log(u) <= log_alpha) {
+    return(beta_prop)  # 接受新参数
+  } else {
+    return(beta_current)  # 拒绝新参数，保持当前参数
+  }
+}
+
+# 测试结果
+cat("Updated beta:\n", update_beta_MH(Y, D, X, phi_true, beta_true, beta_prior_mean, beta_prior_sd, 0.1), "\n")
+
+
+```
+
+## 2.3 更新$\phi$
+
+```{r}
+# CRT 辅助函数
+crt_sample <- function(Y, phi) {
+  l <- 0
+  if (Y == 0) {
+    return(l)
+  }
+  for (m in 1:Y) {
+    l <- l + rbinom(1, 1, phi / (m - 1 + phi))
+  }
+  return(l)
+}
+
+# 更新 phi 的函数
+update_phi <- function(Y, D, mu, phi_current, e0, f0) {
+  # 筛选 D_i = 1 对应的 Y_i
+  indices <- which(D == 1)
+  Y_subset <- Y[indices]
+  mu_subset <- mu[indices]
+  
+  # Step 1: 计算 CRT 辅助变量 l_j
+  l_j <- sapply(Y_subset, function(y) crt_sample(y, phi_current))
+  
+  # Step 2: 计算 gamma_{n_j}
+  gamma_nj <- mu_subset / (mu_subset + phi_current)
+  
+  # Step 3: 更新 phi
+  shape <- e0 + sum(l_j)
+  rate <- f0 - sum(log(1 - gamma_nj))
+  phi_new <- rgamma(1, shape = shape, rate = rate)
+  
+  return(phi_new)
+}
+
+
+# 测试：
+e0 <- 2  # Gamma 分布形状参数
+f0 <- 1  # Gamma 分布速率参数
+current_phi <- 100  # 当前的 phi
+
+# 更新 phi
+phi_updated <- update_phi(Y, D, mu, current_phi, e0, f0)
+
+# 离散化处理  
+# phi_updated <- round(phi_updated)
+
+# 查看结果
+cat("Updated phi:", phi_updated, "true phi:", phi_true, "\n")
+
+
+
+```
+
+```{r}
+update_phi_MH <- function(Y, D, X, beta, Z, phi_current, e_0, f_0, sigma_q) {
+  n <- length(Y)  # 数据的大小
+  
+  # Step 1: 计算当前 phi 下的目标分布值（后验分布的未归一化部分）
+  log_p_current <- 0
+  for (i in 1:n) {
+    log_p_current <- log_p_current + D[i] * (lgamma(phi_current + Z[i]) - lgamma(phi_current)) 
+    log_p_current <- log_p_current + (-phi_current * D[i]) * log(1 + exp(sum(X[i, ] * beta)))
+  }
+  
+  # 添加先验分布的对数（Gamma分布的对数）
+  log_p_current <- log_p_current + dgamma(phi_current, shape = e_0, rate = f_0, log = TRUE)
+    #(e_0 - 1) * log(phi_current) - f_0 * phi_current - lgamma(e_0)
+  
+  # Step 2: 生成候选的 phi（使用正态分布生成）
+  phi_prop <- rnorm(1, mean = phi_current, sd = sigma_q)
+  if (phi_prop <= 0) {
+    return(phi_current)  # 如果候选值小于等于零，拒绝
+  }
+  
+  # Step 3: 计算候选 phi 的目标分布值
+  log_p_prop <- 0
+  for (i in 1:n) {
+    log_p_prop <- log_p_prop + D[i] * (lgamma(phi_prop + Z[i]) - lgamma(phi_prop)) 
+    log_p_prop <- log_p_prop + (-phi_prop * D[i]) * log(1 + exp(sum(X[i, ] * beta)))
+  }
+  
+  # 添加先验分布的对数（Gamma分布的对数）
+  log_p_prop <- log_p_prop + dgamma(phi_prop, shape = e_0, rate = f_0, log = TRUE)
+    #(e_0 - 1) * log(phi_prop) - f_0 * phi_prop - lgamma(e_0)
+  
+  # Step 4: 计算接受概率 alpha
+  log_alpha <- min(0, log_p_prop - log_p_current)
+  
+  # Step 5: 生成均匀随机数 u，并决定是否接受新参数
+  u <- runif(1)
+  
+  if (log(u) <= log_alpha) {
+    return(phi_prop)  # 接受新参数
+  } else {
+    return(phi_current)  # 拒绝新参数，保持当前参数
+  }
+}
+
+# 测试结果
+cat("Updated phi:\n", update_phi_MH(Y, D, X, beta_true, Y, phi_true, 2, 1, 0.1), "\n")
+
+```
+
+# 三、Gibbs采样
+
+将其他参数设置为真值，对每个参数单独抽样看看估计精度。
+
+单独抽beta时MH还行，用PG的误差非常大。
+
+单独抽beta+D的数据，误差也很大？
+
+```{r}
+library(BayesLogit)  # 用于生成 Polya-Gamma 随机变量
+library(MASS)        # 用于多变量正态分布抽样
+
+# Gibbs抽样函数
+gibbs_sampler <- function(Y, X, iterations, burn_in, beta_prior_mean, beta_prior_sd, e0, f0,true_param,DMZ_true) {
+  n <- length(Y)
+  p <- ncol(X)  # X 的列数，等于 beta 的维度
+  
+  # 获取真实参数
+  beta_true <- true_param[1:3]
+  beta_copy <- beta_true
+  beta_copy[1] <- beta_true[1]-log(phi_true)
+  phi_true <- true_param[4]
+  pi0_true <- true_param[5]
+  p_true <- true_param[6]
+  D_true <- DMZ_true$D
+  M_true <- DMZ_true$M
+  Z_true <- DMZ_true$Z
+  
+  # 初始化参数
+  beta <- matrix(0, nrow = iterations, ncol = p)  # 储存 beta 的样本
+  phi <- numeric(iterations)                      # 储存 phi 的样本
+  pi0 <- numeric(iterations)                     # 储存 pi0 的样本
+  p_param <- numeric(iterations)                 # 储存 p 的样本
+  D <- matrix(0, nrow = iterations, ncol = n)    # 储存 D 的样本
+  M <- matrix(0, nrow = iterations, ncol = n)    # 储存 M 的样本
+  Z <- matrix(0, nrow = iterations, ncol = n)    # 储存 Z 的样本
+  
+  # 初始化目标参数
+  beta[1, ] <- rep(0.2, p)         # 初始 beta
+  phi[1] <- 2                    # 初始 phi
+  pi0[1] <- 0.5                  # 初始 pi0
+  p_param[1] <- 0.5              # 初始 p
+  D[1, ] <- ifelse(Y >= 1, 1, rbinom(n, 1, 0.5))  # 初始化 D
+  M[1, ] <- ifelse(Y <= 1, Y, rbinom(n, 1, 0.5))  # 初始化 M
+  Z[1, ] <- ifelse(Y > 1, Y, rbinom(n, 1, 0.5))  # 初始化 Z
+  
+  # Gibbs抽样
+  for (t in 2:iterations) {
+    if (t %% 1000 == 0){
+      cat("迭代次数:", t, "\r")
+    }
+    # Step (a): 更新 gamma
+    gamma <- mu / (mu + phi[t - 1])
+    # gamma <- exp(X %*% beta_true) / (1 + exp(X %*% beta_true))
+    
+    # Step (b): 更新 pi0
+    pi0[t] <- update_pi0(D[t - 1, ])
+    #pi0[t] <- pi0_true
+    
+    # Step (c): 更新 p
+    p_param[t] <- update_p(M[t-1, ], D[t - 1, ])
+    #p_param[t] <- p_true
+    
+    # Step (d): 更新 D
+    DMZ <- update_DMZ(Y, X, beta[t - 1, ], pi0[t - 1], p_param[t - 1], phi[t - 1], D[t - 1, ], M[t - 1, ], Z[t - 1, ],gamma)
+    D[t, ] <- DMZ$D
+    M[t, ] <- DMZ$M
+    Z[t, ] <- DMZ$Z
+    
+    # D[t, ] <- D_true
+    # M[t, ] <- M_true
+    # Z[t, ] <- Z_true
+    
+    # Step (e): 更新 beta
+    # beta[t, ] <- update_beta_PG(Y, D[t, ], X, phi[t - 1], beta_prior_mean, beta_prior_sd)
+    beta[t, ] <- update_beta_MH(Z[t, ], D[t, ], X, phi[t - 1], beta[t-1, ], beta_prior_mean, beta_prior_sd, 0.1)
+    #beta[t, ] <- beta_copy
+    
+    
+    # Step (f): 更新 phi
+    gamma <- exp(X %*% beta[t-1, ]) / (1 + exp(X %*% beta[t-1, ]))
+    mu <- gamma / (1 - gamma) * phi[t - 1]
+    #mu <- exp(X %*% beta_true)
+    
+    #phi[t] <- update_phi(Y, D[t, ], mu, phi[t - 1], e0, f0)
+    phi[t] <- update_phi_MH(Y, D[t, ], X, beta[t, ], Z[t, ], phi[t - 1], e0, f0, 0.1)
+    #phi[t] <- update_phi(Y, D_true, mu, phi[t - 1], e0, f0)
+    #print(phi[t])
+    #phi[t] <- phi_true
+  }
+  DMZ <- list(D = D, M = M, Z = Z)
+  # 返回后验样本
+  return(list(beta = beta, phi = phi, pi0 = pi0, p = p_param, DMZ = DMZ))
+}
+
+# 设置参数
+# set.seed(123)
+
+iterations <- 5000
+burn_in <- 1000
+beta_prior_mean <- c(0.2, -0.2, -0.2)  # beta 的先验均值
+beta_prior_sd <- c(1, 1, 1)  # beta 的先验标准差
+e0 <- 2  # Gamma 分布形状参数
+f0 <- 2  # Gamma 分布速率参数
+
+
+true_param <- c(beta_true, phi_true, pi0_true, p_true)
+DMZ_true <- list(D = D, M = M, Z = Z)
+# 调用 Gibbs 抽样
+result <- gibbs_sampler(Y, X, iterations, burn_in, beta_prior_mean, beta_prior_sd, e0, f0,true_param,DMZ_true=DMZ_true)
+
+beta_copy <- beta_true
+beta_copy[1] <- beta_true[1]-log(phi_true)
+# 查看结果
+cat("Posterior mean of beta:\n", colMeans(result$beta[-(1:burn_in), ]), "\n true beta:", beta_copy, "\n")
+cat("Posterior mean of phi:", mean(result$phi[-(1:burn_in)]), "true phi:", phi_true, "\n")
+cat("Posterior mean of pi0:", mean(result$pi0[-(1:burn_in)]), "true pi0:", pi0_true, "\n")
+cat("Posterior mean of p:", mean(result$p[-(1:burn_in)]), "true p:", p_true, "\n")
+
+
+```
+
+```{r}
+# 加载必要的库
+library(ggplot2)
+library(dplyr)
+
+# 绘制轨迹图和累积均值图的函数
+plot_trace_and_cummean <- function(samples, param_name, true_param) {
+  iterations <- length(samples)
+  
+  # 计算累积均值
+  cum_mean <- cumsum(samples) / seq_along(samples)
+  
+  # 将数据转化为数据框以便于 ggplot 使用
+  data <- data.frame(
+    Iteration = 1:iterations,
+    Samples = samples,
+    CumulativeMean = cum_mean
+  )
+  
+  # 使用 ggplot 绘制轨迹图和累积均值图
+  p1 <- ggplot(data) +
+    geom_line(aes(x = Iteration, y = Samples), color = "blue") +
+    labs(title = paste("Trace Plot of", param_name), x = "Iteration", y = param_name) +
+    #添加真值红色虚线
+    geom_hline(yintercept = true_param, linetype = "dashed", color = "red") +
+    theme_minimal()
+  
+  p2 <- ggplot(data) +
+    geom_line(aes(x = Iteration, y = CumulativeMean), color = "red") +
+    labs(title = paste("Cumulative Mean of", param_name), x = "Iteration", y = paste("Cumulative Mean of", param_name)) +
+    #添加真值红色虚线
+    geom_hline(yintercept = true_param, linetype = "dashed", color = "red") +
+    theme_minimal()
+  
+  # 使用 gridExtra 包将两个图呈现于同一窗口
+  library(gridExtra)
+  grid.arrange(p1, p2, ncol = 1)
+}
+
+# 示例：对结果中的参数绘图
+# 使用 result 中的样本进行绘图
+plot_trace_and_cummean(result$phi, "phi", phi_true)
+plot_trace_and_cummean(result$pi0, "pi0", pi0_true)
+plot_trace_and_cummean(result$p, "p", p_true)
+# 对 beta 的每个维度分别绘图
+for (i in 1:ncol(result$beta)) {
+  plot_trace_and_cummean(result$beta[, i], paste("beta", i, sep = "_"), beta_copy[i])
+}
+
+```
+
+```{r}
+acf_beta0 <- acf(result$beta[-(1:burn_in), i], lag.max = 1000, plot = F)
+plot(acf_beta0, main = "ACF for Beta0")
+```
+
+Thining 操作
+
+(没啥用啊我说)
+
+```{r}
+get_k_step_sample <- function(beta_list, begin,k){
+  n <- nrow(beta_list)
+  return(beta_list[seq(begin, n, by = k), ])
+}
+begin <- 10000
+k_step_sample <- get_k_step_sample(result$beta, begin, 100)
+
+cat("The mean of beta0 is",colMeans(k_step_sample)[1],"\n")
+cat("The mean of beta1 is",colMeans(k_step_sample)[2],"\n")
+cat("The mean of beta2 is",colMeans(k_step_sample)[3],"\n")
+
+```
+
+```{r}
+# Y>1的位置
+index <- which(Y<=1)
+mean(result$DMZ$Z[1,][index]==Y[index])
+
+
+```
