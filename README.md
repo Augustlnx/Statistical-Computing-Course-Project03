@@ -2,9 +2,9 @@
 
 ## 项目简介及报告预览
 
-本项目基于贝叶斯方法，针对0-1膨胀负二项回归模型（ZOINB）的参数估计问题展开研究，使用Gibbs抽样与Metropolis-Hastings（M-H）算法对模型参数进行推断，并结合模拟数据验证方法的有效性。
+本项目基于贝叶斯方法，针对**0-1膨胀负二项回归模型**（ZOINB）的参数估计问题展开研究，使用**Gibbs抽样**与**Metropolis-Hastings**（M-H）算法对模型参数进行推断，并结合模拟数据验证方法的有效性。
 
-完整项目报告请阅读飞书文档：[0-1膨胀负二项回归模型的贝叶斯参数估计](https://owj4v466fnb.feishu.cn/docx/H7AkdrJZ1oSpLnx7RZzcOoyMn9b)
+完整项目报告请阅读飞书文档：[0-1膨胀负二项回归模型的贝叶斯参数估计](https://g15zouwoip.feishu.cn/docx/Et4ydl6S8o2v0exSuP2cqXbjn3c)
 
 ![image](https://github.com/user-attachments/assets/4348f064-1e37-4b37-8f09-4f28e4024e0f)
 
